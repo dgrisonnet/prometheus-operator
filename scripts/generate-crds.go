@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -74,24 +73,6 @@ func (generator crdGenerator) generateYAMLManifests() error {
 		return errors.Wrapf(err, "running %s", cmd)
 	}
 
-	prometheusManifest := fmt.Sprintf("%s/%s_%s.yaml", generator.YAMLDir, crdAPIGroup, "prometheus")
-	data, err := ioutil.ReadFile(prometheusManifest)
-	if err != nil {
-		return errors.Wrapf(err, "reading %s", prometheusManifest)
-	}
-	data = bytes.ReplaceAll(data, []byte("plural: prometheus"), []byte("plural: prometheuses"))
-	data = bytes.ReplaceAll(data, []byte("prometheus.monitoring.coreos.com"), []byte("prometheuses.monitoring.coreos.com"))
-
-	prometheusesManifest := fmt.Sprintf("%s/%s_%s.yaml", generator.YAMLDir, crdAPIGroup, "prometheuses")
-	err = ioutil.WriteFile(prometheusesManifest, data, 0644)
-	if err != nil {
-		return errors.Wrapf(err, "generating %s", prometheusesManifest)
-	}
-
-	err = os.Remove(prometheusManifest)
-	if err != nil {
-		return errors.Wrapf(err, "removing %s", prometheusManifest)
-	}
 	return nil
 }
 
