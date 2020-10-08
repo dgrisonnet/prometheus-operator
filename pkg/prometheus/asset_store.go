@@ -16,6 +16,9 @@ package prometheus
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -109,57 +112,70 @@ func assetKeyFunc(obj interface{}) (string, error) {
 
 // addSafeTLSConfig processes the given SafeTLSConfig and adds the referenced CA, certificate and key to the store.
 func (a *assetStore) addSafeTLSConfig(ctx context.Context, ns string, tlsConfig monitoringv1.SafeTLSConfig) error {
+	err := tlsConfig.Validate()
+	if err != nil {
+		return errors.Wrap(err, "failed to validate TLS configuration")
+	}
+
+	var (
+		ca   string
+		cert string
+		key  string
+	)
+
 	if tlsConfig.CA != (monitoringv1.SecretOrConfigMap{}) {
-		var (
-			ca  string
-			err error
-		)
-
-		switch {
-		case tlsConfig.CA.Secret != nil:
-			ca, err = a.getSecretKey(ctx, ns, *tlsConfig.CA.Secret)
-
-		case tlsConfig.CA.ConfigMap != nil:
-			ca, err = a.getConfigMapKey(ctx, ns, *tlsConfig.CA.ConfigMap)
-		}
-
+		ca, err = a.getKey(ctx, ns, tlsConfig.CA)
 		if err != nil {
 			return errors.Wrap(err, "failed to get CA")
 		}
-
 		a.tlsAssets[tlsAssetKeyFromSelector(ns, tlsConfig.CA)] = TLSAsset(ca)
 	}
 
 	if tlsConfig.Cert != (monitoringv1.SecretOrConfigMap{}) {
-		var (
-			cert string
-			err  error
-		)
-
-		switch {
-		case tlsConfig.Cert.Secret != nil:
-			cert, err = a.getSecretKey(ctx, ns, *tlsConfig.Cert.Secret)
-
-		case tlsConfig.Cert.ConfigMap != nil:
-			cert, err = a.getConfigMapKey(ctx, ns, *tlsConfig.Cert.ConfigMap)
-		}
-
+		cert, err = a.getKey(ctx, ns, tlsConfig.Cert)
 		if err != nil {
 			return errors.Wrap(err, "failed to get cert")
 		}
-
 		a.tlsAssets[tlsAssetKeyFromSelector(ns, tlsConfig.Cert)] = TLSAsset(cert)
 	}
 
 	if tlsConfig.KeySecret != nil {
-		key, err := a.getSecretKey(ctx, ns, *tlsConfig.KeySecret)
+		key, err = a.getSecretKey(ctx, ns, *tlsConfig.KeySecret)
 		if err != nil {
 			return errors.Wrap(err, "failed to get key")
 		}
 		a.tlsAssets[tlsAssetKeyFromSelector(ns, monitoringv1.SecretOrConfigMap{Secret: tlsConfig.KeySecret})] = TLSAsset(key)
 	}
 
+	if !tlsConfig.InsecureSkipVerify {
+		err = verifyCert([]byte(ca), []byte(cert))
+		if err != nil {
+			return errors.Wrap(err, "failed to verify certificate")
+		}
+	}
+
+	if cert != "" && key != "" {
+		_, err = tls.X509KeyPair([]byte(cert), []byte(key))
+		if err != nil {
+			return errors.Wrap(err, "failed to load X509 key pair")
+		}
+	}
+
 	return nil
+}
+
+// addTLSConfig processes the given TLSConfig and adds the referenced CA, certificate and key to the store.
+func (a *assetStore) addTLSConfig(ctx context.Context, ns string, tlsConfig *monitoringv1.TLSConfig) error {
+	if tlsConfig == nil {
+		return nil
+	}
+
+	err := tlsConfig.Validate()
+	if err != nil {
+		return err
+	}
+
+	return a.addSafeTLSConfig(ctx, ns, tlsConfig.SafeTLSConfig)
 }
 
 // addBasicAuth processes the given *BasicAuth and adds the referenced credentials to the store.
@@ -200,6 +216,16 @@ func (a *assetStore) addBearerToken(ctx context.Context, ns string, sel v1.Secre
 	a.bearerTokenAssets[key] = BearerToken(bearerToken)
 
 	return nil
+}
+
+func (a *assetStore) getKey(ctx context.Context, namespace string, sel monitoringv1.SecretOrConfigMap) (string, error) {
+	switch {
+	case sel.Secret != nil:
+		return a.getSecretKey(ctx, namespace, *sel.Secret)
+	case sel.ConfigMap != nil:
+		return a.getConfigMapKey(ctx, namespace, *sel.ConfigMap)
+	}
+	return "", nil
 }
 
 func (a *assetStore) getConfigMapKey(ctx context.Context, namespace string, sel v1.ConfigMapKeySelector) (string, error) {
@@ -260,4 +286,31 @@ func (a *assetStore) getSecretKey(ctx context.Context, namespace string, sel v1.
 	}
 
 	return string(secret.Data[sel.Key]), nil
+}
+
+func verifyCert(caPEM, certPEM []byte) error {
+	roots := x509.NewCertPool()
+	ok := roots.AppendCertsFromPEM(caPEM)
+	if !ok {
+		return errors.New("failed to parse CA certificate")
+	}
+
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil {
+		return errors.New("failed to parse certificate")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse certificate")
+	}
+
+	opts := x509.VerifyOptions{
+		Roots: roots,
+	}
+
+	if _, err := cert.Verify(opts); err != nil {
+		return errors.Wrap(err, "failed to verify certificate")
+	}
+
+	return nil
 }

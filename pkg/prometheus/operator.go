@@ -1542,7 +1542,7 @@ func (c *Operator) createOrUpdateTLSAssetSecret(ctx context.Context, p *monitori
 
 	for i, rw := range p.Spec.RemoteWrite {
 		if rw.TLSConfig != nil {
-			if err := store.addSafeTLSConfig(ctx, p.GetNamespace(), rw.TLSConfig.SafeTLSConfig); err != nil {
+			if err := store.addTLSConfig(ctx, p.GetNamespace(), rw.TLSConfig); err != nil {
 				return errors.Wrapf(err, "remote write %d", i)
 			}
 		}
@@ -1638,7 +1638,7 @@ func (c *Operator) selectServiceMonitors(ctx context.Context, p *monitoringv1.Pr
 			}
 
 			if endpoint.TLSConfig != nil {
-				if err = store.addSafeTLSConfig(ctx, sm.GetNamespace(), endpoint.TLSConfig.SafeTLSConfig); err != nil {
+				if err = store.addTLSConfig(ctx, sm.GetNamespace(), endpoint.TLSConfig); err != nil {
 					break
 				}
 			}
@@ -1816,10 +1816,6 @@ func testForArbitraryFSAccess(e monitoringv1.Endpoint) error {
 	tlsConf := e.TLSConfig
 	if tlsConf == nil {
 		return nil
-	}
-
-	if err := e.TLSConfig.Validate(); err != nil {
-		return err
 	}
 
 	if tlsConf.CAFile != "" || tlsConf.CertFile != "" || tlsConf.KeyFile != "" {

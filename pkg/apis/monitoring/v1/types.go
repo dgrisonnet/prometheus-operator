@@ -970,6 +970,14 @@ func (c *SafeTLSConfig) Validate() error {
 		}
 	}
 
+	if c.Cert != (SecretOrConfigMap{}) && c.KeySecret == nil {
+		return &TLSConfigValidationError{"client cert specified without client key"}
+	}
+
+	if c.KeySecret != nil && c.Cert == (SecretOrConfigMap{}) {
+		return &TLSConfigValidationError{"client key specified without client cert"}
+	}
+
 	return nil
 }
 
@@ -1008,6 +1016,14 @@ func (c *TLSConfig) Validate() error {
 
 	if c.KeyFile != "" && c.KeySecret != nil {
 		return &TLSConfigValidationError{"tls config can not both specify KeyFile and KeySecret"}
+	}
+
+	if c.CertFile != "" && (c.KeyFile == "" || c.KeySecret == nil) {
+		return &TLSConfigValidationError{"client cert specified without client key"}
+	}
+
+	if c.KeyFile != "" && (c.CertFile == "" || c.Cert == (SecretOrConfigMap{})) {
+		return &TLSConfigValidationError{"client key specified without client cert"}
 	}
 
 	return c.SafeTLSConfig.Validate()
