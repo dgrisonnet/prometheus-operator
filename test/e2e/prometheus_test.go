@@ -246,8 +246,8 @@ func createK8sSampleApp(t *testing.T, name, ns string) (string, int32) {
 	return svc.Spec.ClusterIP, svc.Spec.Ports[1].Port
 }
 
-func createK8sAppMonitoring(t *testing.T, name, ns string, prwtc testFramework.PromRemoteWriteTestConfig,
-	svcIp string, svcTLSPort int32) {
+func createK8sAppMonitoring(name, ns string, prwtc testFramework.PromRemoteWriteTestConfig,
+	svcIp string, svcTLSPort int32) error {
 
 	sm := framework.MakeBasicServiceMonitor(name)
 	sm.Spec.Endpoints = []monitoringv1.Endpoint{
@@ -278,26 +278,28 @@ func createK8sAppMonitoring(t *testing.T, name, ns string, prwtc testFramework.P
 	}
 
 	if _, err := framework.MonClientV1.ServiceMonitors(ns).Create(context.TODO(), sm, metav1.CreateOptions{}); err != nil {
-		t.Fatal("creating ServiceMonitor failed: ", err)
+		return errors.Wrap(err, "failed to create ServiceMonitor")
 	}
 
 	prometheusCRD := framework.MakeBasicPrometheus(ns, name, name, 1)
 	url := "https://" + svcIp + ":" + fmt.Sprint(svcTLSPort)
 	framework.AddRemoteWriteWithTLSToPrometheus(prometheusCRD, url, prwtc)
 	if _, err := framework.CreatePrometheusAndWaitUntilReady(ns, prometheusCRD); err != nil {
-		t.Fatal(err)
+		return err
 	}
 
 	promSVC := framework.MakePrometheusService(prometheusCRD.Name, name, v1.ServiceTypeClusterIP)
 	if _, err := testFramework.CreateServiceAndWaitUntilReady(framework.KubeClient, ns, promSVC); err != nil {
-		t.Fatal(err)
+		return err
 	}
 
 	// Check for proper scraping.
 
 	if err := framework.WaitForHealthyTargets(ns, promSVC.Name, 1); err != nil {
-		t.Fatal(err)
+		return err
 	}
+
+	return nil
 }
 
 func testPromRemoteWriteWithTLS(t *testing.T) {
@@ -322,7 +324,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-key-cert-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      true,
 		},
@@ -342,7 +343,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      true,
 		},
@@ -362,7 +362,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      true,
 		},
@@ -382,7 +381,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-cert-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      true,
 		},
@@ -402,7 +400,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-key-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      true,
 		},
@@ -422,7 +419,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-cert-ca",
 				ResourceType: testFramework.CONFIGMAP,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      true,
 		},
@@ -442,7 +438,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-ca",
 				ResourceType: testFramework.CONFIGMAP,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      true,
 		},
@@ -462,7 +457,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-ca",
 				ResourceType: testFramework.CONFIGMAP,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      true,
 		},
@@ -482,7 +476,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-ca",
 				ResourceType: testFramework.CONFIGMAP,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      true,
 		},
@@ -502,7 +495,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-key-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      true,
 		},
@@ -522,7 +514,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      true,
 		},
@@ -542,7 +533,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "",
 			InsecureSkipVerify: true,
 			ShouldSuccess:      true,
 		},
@@ -564,7 +554,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-key-cert-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "bad_server_cert",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      false,
 		},
@@ -584,7 +573,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "bad_server_cert",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      false,
 		},
@@ -604,7 +592,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-key-cert-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "bad_server_cert",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      false,
 		},
@@ -624,7 +611,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "bad_server_cert",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      false,
 		},
@@ -644,7 +630,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "bad_server_cert",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      false,
 		},
@@ -664,7 +649,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "bad_server_cert",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      false,
 		},
@@ -684,7 +668,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-key-cert-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "bad_client_cert",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      false,
 		},
@@ -704,7 +687,6 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				ResourceName: "client-tls-ca",
 				ResourceType: testFramework.SECRET,
 			},
-			ExpectedInLogs:     "no_client_cert",
 			InsecureSkipVerify: false,
 			ShouldSuccess:      false,
 		},
@@ -734,11 +716,13 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 
 			// Setup monitoring.
 
-			createK8sAppMonitoring(t, name, ns, test, svcIp, svcTLSPort)
-
-			//TODO: make it wait by poll, there are some examples in other tests
-			// use wait.Poll() in k8s.io/apimachinery@v0.18.3/pkg/util/wait/wait.go
-			time.Sleep(45 * time.Second)
+			err := createK8sAppMonitoring(name, ns, test, svcIp, svcTLSPort)
+			if err != nil {
+				if test.ShouldSuccess {
+					t.Fatal(err)
+				}
+				return
+			}
 
 			appOpts := metav1.ListOptions{
 				LabelSelector: fields.SelectorFromSet(fields.Set(map[string]string{
@@ -756,16 +740,11 @@ func testPromRemoteWriteWithTLS(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if test.ShouldSuccess {
-				for _, v := range possibleErrors {
-					if strings.Contains(appLogs, v) {
-						t.Fatalf("test with (%s, %s, %s) faild\nscraped app logs shouldn't containe '%s' but it does",
-							test.ClientKey.Filename, test.ClientCert.Filename, test.CA.Filename, v)
-					}
+			for _, v := range possibleErrors {
+				if strings.Contains(appLogs, v) {
+					t.Fatalf("test with (%s, %s, %s) faild\nscraped app logs shouldn't containe '%s' but it does",
+						test.ClientKey.Filename, test.ClientCert.Filename, test.CA.Filename, v)
 				}
-			} else if !strings.Contains(appLogs, possibleErrors[test.ExpectedInLogs]) {
-				t.Fatalf("test with (%s, %s, %s) faild\nscraped app logs should containe '%s' but it doesn't",
-					test.ClientKey.Filename, test.ClientCert.Filename, test.CA.Filename, possibleErrors[test.ExpectedInLogs])
 			}
 		})
 	}

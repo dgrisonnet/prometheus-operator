@@ -57,7 +57,6 @@ type PromRemoteWriteTestConfig struct {
 	ClientKey          Key
 	ClientCert         Cert
 	CA                 Cert
-	ExpectedInLogs     string
 	InsecureSkipVerify bool
 	ShouldSuccess      bool
 }
