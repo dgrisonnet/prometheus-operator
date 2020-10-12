@@ -2508,6 +2508,9 @@ func testPromArbitraryFSAcc(t *testing.T) {
 					CAFile:   "/etc/ca-certificates/cert.pem",
 					CertFile: "/etc/ca-certificates/cert.pem",
 					KeyFile:  "/etc/ca-certificates/key.pem",
+					SafeTLSConfig: monitoringv1.SafeTLSConfig{
+						InsecureSkipVerify: true,
+					},
 				},
 			},
 			expectTargets: true,
@@ -2523,6 +2526,9 @@ func testPromArbitraryFSAcc(t *testing.T) {
 					CAFile:   "/etc/ca-certificates/cert.pem",
 					CertFile: "/etc/ca-certificates/cert.pem",
 					KeyFile:  "/etc/ca-certificates/key.pem",
+					SafeTLSConfig: monitoringv1.SafeTLSConfig{
+						InsecureSkipVerify: true,
+					},
 				},
 			},
 			expectTargets: false,
